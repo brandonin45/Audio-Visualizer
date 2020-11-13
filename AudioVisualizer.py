@@ -43,7 +43,7 @@ for i in range(32):
 
 prev_volume = [0]*32 #used to slowly reduces spikes for better looking graphics
 
-queue_size = 25
+queue_size = 30
 kick_ave = 0.0
 snare_ave = 0.0
 kick_threshold = 1250 #minimum threshold for kick detection
@@ -72,6 +72,8 @@ def pop_freq(ave, q):
     ave = (ave * queue_size - q.get()) / (queue_size - 1)
     return ave
 
+start = time.time()
+
 p=pyaudio.PyAudio() # start the PyAudio class
 stream=p.open(format=pyaudio.paInt16,channels=1,input_device_index=0,rate=SAMPLE_RATE,input=True,
               frames_per_buffer=CHUNK)
@@ -80,17 +82,13 @@ stream=p.open(format=pyaudio.paInt16,channels=1,input_device_index=0,rate=SAMPLE
 
 # loop that reads data from adc and performs fft, then sends instructions to led, ctrl+C to exit
 try:
-    while True:
+    while time.time() < (start + 30): #timeout after 20 seconds, temporary
         data = np.frombuffer(stream.read(CHUNK),dtype=np.int16) # read data from RCA input
         data = data * np.hamming(len(data)) # smooth the FFT by windowing data
         fftdata = abs(scipy.fft(data)) # perform FFT on data
         fftdata = fftdata[:int(len(fftdata)/2)] # keep only first half
         kick = (fftdata[1] + fftdata[2]) / 2 #take average of sample points in kick drum range
         snare = (fftdata[5] + fftdata[6]) / 2 #take average of sample points in snare drum range
-        #kick_low = fftdata[1]
-        #kick_high = fftdata[3]
-        #snare_low = fftdata[6]
-        #snare_high = fftdata[9]
         draw.rectangle((0, 0, 31, 15), fill=(0,0,0)) #clear all lines on image object
         for i in range(32):
             amplitude = np.sum(fftdata[freq_indices[i]])# sum amplitude of all elements of fftdata in current frequency range
@@ -101,53 +99,47 @@ try:
             if volume < prev_volume[i]: # if volume is lower than prev_volume, slowly lower bar rather than instantly
                 volume = int(prev_volume[i]*0.99)
             xpos = 31-i
-            draw.line((xpos, 0, xpos, volume), fill=(0, 0, 255)) # draw amplitude line
+            draw.line((xpos, 0, xpos, volume), fill=(0, 255, 0)) # draw amplitude line
             if volume > 4: #if high volume, add curve around bar
-                draw.line((xpos, 0, xpos, volume/2), width=5, fill=(0, 0, 255))
-                draw.arc((xpos+1, 0, xpos+7, volume*2 - volume/3), 180, 270, fill=(0, 0, 255))
-                draw.arc((xpos-7, 0, xpos-1, volume*2 - volume/5), 270, 0, fill=(0, 0, 255))
+                draw.line((xpos, 0, xpos, volume/2), width=5, fill=(0, 255, 0))
+                draw.arc((xpos+1, 0, xpos+7, volume*2 - volume/3), 180, 270, fill=(0, 255, 0))
+                draw.arc((xpos-7, 0, xpos-1, volume*2 - volume/5), 270, 0, fill=(0, 255, 0))
             prev_volume[i] = volume #store volume in previous volume array
+        
+        #replace colors with rising stuff
+        for i in range(32):
+            for j in range(16):
+                xy = x,y = i,j
+                if image.getpixel(xy) != (0,0,0):
+                    draw.point(xy, fill=(100+j*16, 255-j*16, 0))
+        
         if kick_count < 3: # have kick and snare effects hang around for a few cycles
-            draw.line((0, 0, 31, 0), fill=("red"))
+            draw.line((31, 0, 31, 15), fill=("blue"))
             kick_count += 1
         if snare_count < 3:
-            draw.line((0, 1, 31, 1), fill=("yellow"))
+            draw.line((0, 0, 0, 15), fill=("blue"))
             snare_count += 1
+        
         if kick_queue.full(): # if history is full, then replace last element from queue, and perform beat detection (queues always have equal size)
-            """
-            kick_ave_low = pop_freq(kick_ave_low, kick_queue_low) # remove popped element from kick average low
-            kick_ave_high = pop_freq(kick_ave_low, kick_queue_high) # remove popped element from kick average high
-            snare_ave_low = pop_freq(snare_ave_low, snare_queue_low) # remove popped element from snare average low
-            snare_ave_high = pop_freq(snare_ave_high, snare_queue_high) # remove popped element from snare average high
-            kick_ave_low = push_freq(kick_ave_low, kick_low, kick_queue_low) # add current amplitude to queue and calculate running average of kick average low
-            kick_ave_high = push_freq(kick_ave_low, kick_high, kick_queue_high) # add current amplitude to queue and calculate running average of kick average high
-            snare_ave_low = push_freq(snare_ave_low, snare_low, snare_queue_low) # add current amplitude to queue and calculate running average of snare average low
-            snare_ave_high = push_freq(snare_ave_high, snare_high, snare_queue_high) # add current amplitude to queue and calculate running average of snare average high
-            """
             kick_ave = pop_freq(kick_ave, kick_queue)
             snare_ave = pop_freq(snare_ave, snare_queue)
             kick_ave = push_freq(kick_ave, kick, kick_queue)
             snare_ave = push_freq(snare_ave, snare, snare_queue)
-            #if kick_low >= kick_ave_low*1.5 and kick_high >= kick_ave_high*1.5 and kick_ave_low > kick_threshold and kick_ave_high > kick_threshold:
-            if kick >= kick_ave*1.8 and kick_ave > kick_threshold:
+            if kick >= kick_ave*2 and kick_ave > kick_threshold:
                 #kick detected
-                draw.line((0, 0, 31, 0), fill=("red"))
+                draw.line((31, 0, 31, 15), fill=("blue"))
+                draw.line((0, 0, 0, 15), fill=("blue"))
+                draw.line((0, 0, 31, 0), fill=("blue"))
+                draw.line((0, 15, 31, 15), fill=("blue"))
                 kick_count = 0
-            #if snare_low >= snare_ave_low*1.5 and snare_high >= snare_ave_high*1.5 and snare_ave_low > snare_threshold and snare_ave_high > snare_threshold:
-            if snare >= snare_ave*1.8 and snare_ave > snare_threshold:
+            if snare >= snare_ave*2 and snare_ave > snare_threshold:
                 #snare detected
-                draw.line((0, 1, 31, 1), fill=("yellow"))
+                draw.line((0, 0, 0, 15), fill=("blue"))
                 snare_count = 0
         else:
-            """
-            kick_ave_low = push_freq(kick_ave_low, kick_low, kick_queue_low) # add current amplitude to queue and calculate running average of kick average low
-            kick_ave_high = push_freq(kick_ave_low, kick_high, kick_queue_high) # add current amplitude to queue and calculate running average of kick average high
-            snare_ave_low = push_freq(snare_ave_low, snare_low, snare_queue_low) # add current amplitude to queue and calculate running average of snare average low
-            snare_ave_high = push_freq(snare_ave_high, snare_high, snare_queue_high) # add current amplitude to queue and calculate running average of snare average high
-            """
             kick_ave = push_freq(kick_ave, kick, kick_queue)
             snare_ave = push_freq(snare_ave, snare, snare_queue)
-            
+                    
         matrix.Clear() #erase the image currently on matrix
         matrix.SetImage(image, 0, 0) #add new image to matrix
             
@@ -159,3 +151,9 @@ except KeyboardInterrupt:
     stream.close()
     p.terminate()
     
+matrix.Clear()
+print('Program Exiting')
+# close the stream gracefully
+stream.stop_stream()
+stream.close()
+p.terminate()

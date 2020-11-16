@@ -14,7 +14,7 @@ from queue import Queue
 
 SAMPLE_RATE = 44100 #sampling rate of the adc to be used
 CHUNK = 2**10 # number of data points to read at a time
-VOL_SCALE = 2000 #minimum unit of frequency amplitudes
+VOL_SCALE = 50000 #minimum unit of frequency amplitudes
 
 #32 bins for frequency grouping for the 32 led columns, 0 at end for last comparison
 freqbins = [20. ,    24.8,    30.8,    38.2,    47.4,    58.9,    73. ,
@@ -73,7 +73,7 @@ stream=p.open(format=pyaudio.paInt16,channels=2,input_device_index=0,rate=SAMPLE
 
 # loop that reads data from adc and performs fft, then sends instructions to led, ctrl+C to exit
 try:
-    while time.time() < (start + 30): #timeout after 30 seconds, temporary
+    while time.time() < (start + 60): #timeout after 30 seconds, temporary
     #while True:
         data = np.frombuffer(stream.read(CHUNK),dtype=np.int16) # read data from input
         data = data * np.hamming(len(data)) # smooth the FFT by windowing data
@@ -124,7 +124,7 @@ try:
                 variance += abs(elem - beat_ave)
             variance = variance / 43
             #print(variance)
-            c = 1.6 - (variance*0.00005) #sensitivity factor
+            c = 1.6 - (variance*0.000003) #sensitivity factor
             if beat >= beat_ave*c and beat_ave > beat_threshold:
                 #beat detected
                 draw_beat()

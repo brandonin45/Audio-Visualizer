@@ -7,7 +7,9 @@ import scipy
 import pyaudio
 from PIL import Image
 from PIL import ImageDraw
+from PIL import ImageColor
 import time
+import math
 from rgbmatrix import RGBMatrix, RGBMatrixOptions
 from queue import Queue
 
@@ -35,11 +37,9 @@ draw = ImageDraw.Draw(image)  # Draw object to store lines
 #set up frequency bins
 freqdata = np.fft.fftfreq(CHUNK,1.0/SAMPLE_RATE) # find frequency bins of data
 freqdata = freqdata[:int(len(freqdata)/2)] # keep only first half
-#print(freqdata)
 freq_indices = [0]*32
 for i in range(32):
     freq_indices[i] = np.where(np.logical_and((freqdata>freqbins[i]),(freqdata<freqbins[i+1])))[0] # select indices where the freq falls in the selected bin
-    #print(freq_indices[i])
 
 prev_volume = [0]*32 #used to slowly reduces spikes for better looking graphics
 
@@ -61,11 +61,12 @@ def pop_freq(ave, q): #remove old average from history and calculate new running
 def draw_beat(): #effect to draw when beat detected
     draw.line((31, 0, 31, 15), fill=("blue"))
     draw.line((0, 0, 0, 15), fill=("blue"))
-    #draw.line((0, 0, 31, 0), fill=("blue"))
     draw.line((0, 15, 31, 15), fill=("blue"))
-    
-    
-start = time.time() #temp
+
+waveStart = time.time() #time for wave shifting
+colorIterator = 0 #iterator for wave shifting
+#shift from green to blue
+colorArr = [(5,229,0), (4,197,31), (3, 166, 63), (2, 135, 95), (0, 104, 127), (0,73,159), (0,42,191), (0,73,159), (0, 104, 127), (2, 135, 95), (3, 166, 63), (4,197,131)] #rainbow rgb values
 
 p=pyaudio.PyAudio() # start the PyAudio class
 stream=p.open(format=pyaudio.paInt16,channels=2,input_device_index=0,rate=SAMPLE_RATE,input=True,
@@ -73,8 +74,7 @@ stream=p.open(format=pyaudio.paInt16,channels=2,input_device_index=0,rate=SAMPLE
 
 # loop that reads data from adc and performs fft, then sends instructions to led, ctrl+C to exit
 try:
-    while time.time() < (start + 60): #timeout after 30 seconds, temporary
-    #while True:
+    while True:
         data = np.frombuffer(stream.read(CHUNK),dtype=np.int16) # read data from input
         data = data * np.hamming(len(data)) # smooth the FFT by windowing data
         #separate left and right channels
@@ -103,13 +103,26 @@ try:
                 draw.arc((xpos+1, 0, xpos+7, volume*2 - volume/3), 180, 270, fill=(0, 255, 0))
                 draw.arc((xpos-7, 0, xpos-1, volume*2 - volume/5), 270, 0, fill=(0, 255, 0))
             prev_volume[i] = volume #store volume in previous volume array
-        
+                
         #replace colors to match rising amplitude
         for i in range(32):
+            colorindex = math.floor((i+colorIterator)/3 % 12) #find color index for this bar
+            if time.time() > (waveStart + 0.05): #shift wave when > then 0.01 seconds
+                if colorIterator == 35: #iterator for shifting color array
+                    colorIterator = 0
+                else:
+                    colorIterator += 1
+                waveStart = time.time() #set new wave time
             for j in range(16):
                 xy = x,y = i,j
                 if image.getpixel(xy) != (0,0,0):
-                    draw.point(xy, fill=(100+j*16, 255-j*16, 0))
+                    color = colorArr[colorindex]
+                    temp = list(color)
+                    temp[0] = temp[0] + j*30
+                    temp[1] = temp[1] - j*16
+                    temp[2] = temp[2] - j*16
+                    color = tuple(temp)
+                    draw.point(xy, fill=color)
         
         if beat_count < 3: # have beat effects hang around for a few cycles
             draw_beat()
@@ -123,13 +136,11 @@ try:
             for elem in list(beat_queue.queue):
                 variance += abs(elem - beat_ave)
             variance = variance / 43
-            #print(variance)
             c = 1.6 - (variance*0.000003) #sensitivity factor
             if beat >= beat_ave*c and beat_ave > beat_threshold:
                 #beat detected
                 draw_beat()
                 beat_count = 0
-
         else:
             beat_ave = push_freq(beat_ave, beat, beat_queue)
                     
@@ -143,11 +154,3 @@ except KeyboardInterrupt:
     stream.stop_stream()
     stream.close()
     p.terminate()
-    
-#temp
-matrix.Clear()
-print('Program Exiting')
-# close the stream gracefully
-stream.stop_stream()
-stream.close()
-p.terminate()

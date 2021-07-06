@@ -5,7 +5,7 @@ This repo showcases the audio visualizer my team and I developed during my senio
  * Radiant RGB coloring schemes
  * Eye-catching motions that intensify musical sounds
  * Percussion beat detection
- * Frequency wave and volume differentiation
+ * Frequency amplitude and wave differentiation
  * Entertaining LED display that reacts to music
 
 ## Demo

@@ -10,7 +10,7 @@ This repo showcases the audio visualizer my team and I developed during my senio
 
 ## Demo
 <p align="center">
-<img width="600" height="500" src="images/pic.PNG">
+<img width="700" height="400" src="images/pic.PNG">
 </p>
 
 Link to video:
